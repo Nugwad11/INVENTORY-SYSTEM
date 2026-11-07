@@ -6,6 +6,7 @@ import {
   Database,
   Download,
   Lock,
+  Pencil,
   RefreshCw,
   ScrollText,
   Search,
@@ -32,7 +33,7 @@ import {
   Tabs,
   type Tone,
 } from '../components/ui';
-import { AddUserModal } from '../components/AddUserModal';
+import { UserFormModal } from '../components/UserFormModal';
 import {
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
@@ -41,7 +42,7 @@ import {
   type Permission,
 } from '../domain/permissions';
 import { verifyAuditChain } from '../domain/audit';
-import type { AuditEvent, Movement, Role, Settings } from '../types';
+import type { AuditEvent, Movement, Role, Settings, User } from '../types';
 import { dateTime, downloadCsv, money, relative, titleCase, todayKey } from '../lib/format';
 
 type Tab = 'people' | 'policies' | 'audit' | 'devices' | 'data';
@@ -221,6 +222,7 @@ export default function Admin() {
 
   // ---------- People ----------
   const [addUserOpen, setAddUserOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const peopleStats = useMemo(() => {
     const active = state.users.filter((user) => user.active);
@@ -543,6 +545,9 @@ export default function Admin() {
                       </td>
                       <td className="right">
                         <div className="flex" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                          <button className="btn btn--sm btn--ghost" onClick={() => setEditingUser(user)}>
+                            <Pencil size={13} /> Edit
+                          </button>
                           {user.active && user.id !== currentUser.id && (
                             <button className="btn btn--sm btn--ghost" onClick={() => actions.switchUser(user.id)}>
                               Act as
@@ -1160,7 +1165,8 @@ export default function Admin() {
         </>
       )}
 
-      <AddUserModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
+      <UserFormModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
+      <UserFormModal open={!!editingUser} user={editingUser} onClose={() => setEditingUser(null)} />
 
       <Modal
         open={resetOpen}

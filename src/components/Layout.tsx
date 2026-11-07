@@ -28,7 +28,7 @@ import {
 import { useApp } from '../store/AppStore';
 import { canAny, ROLE_LABELS, type Permission } from '../domain/permissions';
 import { Avatar } from './ui';
-import { AddUserModal } from './AddUserModal';
+import { UserFormModal } from './UserFormModal';
 import { dateShort, relative } from '../lib/format';
 
 const PRIMARY_NAV: {
@@ -360,7 +360,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
       </div>
 
-      <AddUserModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
+      <UserFormModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
     </div>
   );
 }

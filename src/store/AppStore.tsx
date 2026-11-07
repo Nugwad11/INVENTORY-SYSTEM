@@ -149,6 +149,7 @@ interface AppActions {
   cancelCount: (countId: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   addUser: (input: { name: string; role: Role; phone: string }) => boolean;
+  updateUser: (userId: string, input: { name: string; role: Role; phone: string }) => boolean;
   toggleUser: (userId: string) => void;
   switchUser: (userId: string) => void;
   markAlertAction: (
@@ -1846,6 +1847,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     };
 
+    const updateUser = (userId: string, input: { name: string; role: Role; phone: string }): boolean => {
+      if (!requirePerm('admin.users')) return false;
+      if (!input.name.trim() || !input.phone.trim()) {
+        toast('Name and phone number are required.', 'error');
+        return false;
+      }
+      const target = state.users.find((u) => u.id === userId);
+      if (!target) return false;
+      if (userId === currentUser.id && input.role !== target.role) {
+        toast('You cannot change your own role.', 'error');
+        return false;
+      }
+      if (input.role === 'owner' && target.role !== 'owner' && currentUser.role !== 'owner') {
+        toast('Only an owner can assign the owner role.', 'error');
+        return false;
+      }
+      const before = { name: target.name, role: target.role, phone: target.phone };
+      commit((draft) => {
+        const user = draft.users.find((u) => u.id === userId);
+        if (!user) return;
+        user.name = input.name.trim();
+        user.role = input.role;
+        user.phone = input.phone.trim();
+        audit(
+          draft,
+          'USER_UPDATED',
+          'USER',
+          userId,
+          `Updated ${user.name}'s details (${before.role} → ${user.role}).`,
+          before,
+          { name: user.name, role: user.role, phone: user.phone },
+        );
+      });
+      toast('User details updated.');
+      return true;
+    };
+
     const toggleUser = (userId: string) => {
       if (!requirePerm('admin.users')) return;
       if (userId === currentUser.id) {
@@ -1970,6 +2008,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelCount,
       updateSettings,
       addUser,
+      updateUser,
       toggleUser,
       switchUser,
       markAlertAction,
