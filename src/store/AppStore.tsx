@@ -1915,6 +1915,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toast('You cannot deactivate your own account.', 'error');
         return;
       }
+      const target = state.users.find((u) => u.id === userId);
+      if (!target) return;
+      const activeOwners = state.users.filter((u) => u.role === 'owner' && u.active);
+      if (target.active && target.role === 'owner' && activeOwners.length <= 1) {
+        toast('The last active owner cannot be disabled.', 'error');
+        return;
+      }
       commit((draft) => {
         const user = draft.users.find((u) => u.id === userId);
         if (!user) return;

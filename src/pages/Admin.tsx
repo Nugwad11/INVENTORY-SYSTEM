@@ -224,6 +224,7 @@ export default function Admin() {
   // ---------- People ----------
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [disablingUser, setDisablingUser] = useState<User | null>(null);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
   const peopleStats = useMemo(() => {
@@ -558,13 +559,19 @@ export default function Admin() {
                             </button>
                           )}
                           <button
-                            className={`switch ${user.active ? 'on' : ''}`}
-                            onClick={() => actions.toggleUser(user.id)}
-                            disabled={user.id === currentUser.id}
-                            aria-label={`${user.active ? 'Deactivate' : 'Reactivate'} ${user.name}`}
-                            aria-pressed={user.active}
-                            title={user.id === currentUser.id ? 'You cannot deactivate your own account' : undefined}
-                          />
+                            className="btn btn--sm btn--ghost"
+                            onClick={() => (user.active ? setDisablingUser(user) : actions.toggleUser(user.id))}
+                            disabled={user.id === currentUser.id || (user.role === 'owner' && user.active && activeOwnerCount <= 1)}
+                            title={
+                              user.id === currentUser.id
+                                ? 'You cannot disable your own account'
+                                : user.role === 'owner' && user.active && activeOwnerCount <= 1
+                                  ? 'The last active owner cannot be disabled'
+                                  : `${user.active ? 'Disable' : 'Enable'} ${user.name}`
+                            }
+                          >
+                            {user.active ? 'Disable' : 'Enable'}
+                          </button>
                           <button
                             className="btn btn--sm btn--ghost"
                             onClick={() => setDeletingUser(user)}
@@ -1186,6 +1193,43 @@ export default function Admin() {
 
       <UserFormModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
       <UserFormModal open={!!editingUser} user={editingUser} onClose={() => setEditingUser(null)} />
+
+      <Modal
+        open={!!disablingUser}
+        onClose={() => setDisablingUser(null)}
+        title="Disable user?"
+        subtitle="The account can be enabled again at any time."
+        footer={
+          <>
+            <button className="btn btn--ghost" onClick={() => setDisablingUser(null)}>Cancel</button>
+            <button
+              className="btn btn--primary"
+              onClick={() => {
+                if (disablingUser) {
+                  actions.toggleUser(disablingUser.id);
+                  setDisablingUser(null);
+                }
+              }}
+            >
+              Disable user
+            </button>
+          </>
+        }
+      >
+        {disablingUser && (
+          <div className="grid" style={{ gap: 14 }}>
+            <div className="banner banner--warning">
+              {disablingUser.name} will not be able to sign in, be switched to, or approve work until the account is
+              enabled again. Their documents and audit history stay intact.
+            </div>
+            <div className="stat-strip">
+              <div><div className="label">Person</div><div className="value" style={{ fontSize: '0.85rem' }}>{disablingUser.name}</div></div>
+              <div><div className="label">Role</div><div className="value" style={{ fontSize: '0.85rem' }}>{ROLE_LABELS[disablingUser.role]}</div></div>
+              <div><div className="label">Phone</div><div className="value" style={{ fontSize: '0.85rem' }}>{disablingUser.phone}</div></div>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={!!deletingUser}
