@@ -12,6 +12,7 @@ import {
   Search,
   ShieldCheck,
   Smartphone,
+  Trash2,
   Upload,
   UserPlus,
   Users,
@@ -223,6 +224,7 @@ export default function Admin() {
   // ---------- People ----------
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
   const peopleStats = useMemo(() => {
     const active = state.users.filter((user) => user.active);
@@ -233,6 +235,8 @@ export default function Admin() {
       roles: new Set(active.map((user) => user.role)).size,
     };
   }, [state.users]);
+
+  const activeOwnerCount = state.users.filter((user) => user.role === 'owner' && user.active).length;
 
   // ---------- Policies ----------
   const [policyForm, setPolicyForm] = useState<PolicyForm>(() => policyFormFrom(state.settings));
@@ -561,6 +565,21 @@ export default function Admin() {
                             aria-pressed={user.active}
                             title={user.id === currentUser.id ? 'You cannot deactivate your own account' : undefined}
                           />
+                          <button
+                            className="btn btn--sm btn--ghost"
+                            onClick={() => setDeletingUser(user)}
+                            disabled={user.id === currentUser.id || (user.role === 'owner' && user.active && activeOwnerCount <= 1)}
+                            aria-label={`Delete ${user.name}`}
+                            title={
+                              user.id === currentUser.id
+                                ? 'You cannot delete your own account'
+                                : user.role === 'owner' && user.active && activeOwnerCount <= 1
+                                  ? 'The last active owner cannot be deleted'
+                                  : `Delete ${user.name}`
+                            }
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1167,6 +1186,40 @@ export default function Admin() {
 
       <UserFormModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
       <UserFormModal open={!!editingUser} user={editingUser} onClose={() => setEditingUser(null)} />
+
+      <Modal
+        open={!!deletingUser}
+        onClose={() => setDeletingUser(null)}
+        title="Delete user?"
+        subtitle="This cannot be undone from inside the app."
+        footer={
+          <>
+            <button className="btn btn--ghost" onClick={() => setDeletingUser(null)}>Cancel</button>
+            <button
+              className="btn btn--danger"
+              onClick={() => {
+                if (deletingUser && actions.deleteUser(deletingUser.id)) setDeletingUser(null);
+              }}
+            >
+              <Trash2 size={15} /> Delete user
+            </button>
+          </>
+        }
+      >
+        {deletingUser && (
+          <div className="grid" style={{ gap: 14 }}>
+            <div className="banner banner--danger">
+              {deletingUser.name} loses access immediately. Historical documents keep the recorded name, and the
+              audit trail keeps the deletion event.
+            </div>
+            <div className="stat-strip">
+              <div><div className="label">Person</div><div className="value" style={{ fontSize: '0.85rem' }}>{deletingUser.name}</div></div>
+              <div><div className="label">Role</div><div className="value" style={{ fontSize: '0.85rem' }}>{ROLE_LABELS[deletingUser.role]}</div></div>
+              <div><div className="label">Phone</div><div className="value" style={{ fontSize: '0.85rem' }}>{deletingUser.phone}</div></div>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={resetOpen}

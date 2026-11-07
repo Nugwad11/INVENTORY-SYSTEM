@@ -150,6 +150,7 @@ interface AppActions {
   updateSettings: (patch: Partial<Settings>) => void;
   addUser: (input: { name: string; role: Role; phone: string }) => boolean;
   updateUser: (userId: string, input: { name: string; role: Role; phone: string }) => boolean;
+  deleteUser: (userId: string) => boolean;
   toggleUser: (userId: string) => void;
   switchUser: (userId: string) => void;
   markAlertAction: (
@@ -1884,6 +1885,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     };
 
+    const deleteUser = (userId: string): boolean => {
+      if (!requirePerm('admin.users')) return false;
+      const target = state.users.find((u) => u.id === userId);
+      if (!target) return false;
+      if (userId === currentUser.id) {
+        toast('You cannot delete your own account.', 'error');
+        return false;
+      }
+      const activeOwners = state.users.filter((u) => u.role === 'owner' && u.active);
+      if (target.role === 'owner' && target.active && activeOwners.length <= 1) {
+        toast('The last active owner cannot be deleted.', 'error');
+        return false;
+      }
+      const before = { name: target.name, role: target.role, phone: target.phone };
+      commit((draft) => {
+        const index = draft.users.findIndex((u) => u.id === userId);
+        if (index === -1) return;
+        audit(draft, 'USER_DELETED', 'USER', userId, `Deleted ${target.name} (${target.role}).`, before);
+        draft.users.splice(index, 1);
+      });
+      toast(`${target.name} deleted.`);
+      return true;
+    };
+
     const toggleUser = (userId: string) => {
       if (!requirePerm('admin.users')) return;
       if (userId === currentUser.id) {
@@ -2009,6 +2034,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateSettings,
       addUser,
       updateUser,
+      deleteUser,
       toggleUser,
       switchUser,
       markAlertAction,
