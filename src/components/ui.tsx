@@ -183,6 +183,7 @@ export function Modal({
   children,
   footer,
   size = 'md',
+  className = '',
 }: {
   open: boolean;
   onClose: () => void;
@@ -191,6 +192,7 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   size?: 'md' | 'wide' | 'xl';
+  className?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -210,7 +212,7 @@ export function Modal({
   return createPortal(
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
-        className={`modal ${size === 'wide' ? 'modal--wide' : size === 'xl' ? 'modal--xl' : ''}`}
+        className={`modal ${size === 'wide' ? 'modal--wide' : size === 'xl' ? 'modal--xl' : ''} ${className}`}
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}

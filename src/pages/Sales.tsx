@@ -5,6 +5,7 @@ import {
   Download,
   Minus,
   Plus,
+  Printer,
   ReceiptText,
   RotateCcw,
   Search,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../store/AppStore';
 import { Badge, Card, Drawer, EmptyState, Modal, PageHeader, Stat, StatusBadge, Tabs } from '../components/ui';
+import { SaleReceipt } from '../components/SaleReceipt';
 import { can } from '../domain/permissions';
 import { stockFor } from '../domain/inventory';
 import { dateKey, dateTime, downloadCsv, money, num, timeOnly } from '../lib/format';
@@ -44,6 +46,7 @@ export default function Sales() {
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [voidSale, setVoidSale] = useState<Sale | null>(null);
   const [voidReason, setVoidReason] = useState('');
+  const [receiptSale, setReceiptSale] = useState<Sale | null>(null);
   const [returnSale, setReturnSale] = useState<Sale | null>(null);
   const [returnLines, setReturnLines] = useState<ReturnLine[]>([]);
   const [returnReason, setReturnReason] = useState('');
@@ -105,17 +108,18 @@ export default function Sales() {
       actions.toast('Attach a customer name to a credit sale.', 'error');
       return;
     }
-    const ok = actions.createSale({
+    const sale = actions.createSale({
       lines: cart.map((line) => ({ productId: line.productId, qty: line.qty })),
       payment,
       discount,
       customerName,
     });
-    if (ok) {
+    if (sale) {
       setCart([]);
       setDiscountNaira('');
       setCustomerName('');
       setPayment('CASH');
+      setReceiptSale(sale);
     }
   };
 
@@ -343,6 +347,7 @@ export default function Sales() {
         footer={
           selectedSale ? (
             <>
+              <button className="btn" onClick={() => setReceiptSale(selectedSale)}><Printer size={15} /> Receipt</button>
               {selectedSale.status !== 'VOIDED' && can(currentUser, 'sale.return') && (
                 <button className="btn" onClick={() => openReturn(selectedSale)}><RotateCcw size={15} /> Record return</button>
               )}
@@ -515,6 +520,22 @@ export default function Sales() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={!!receiptSale}
+        onClose={() => setReceiptSale(null)}
+        title="Receipt"
+        subtitle={receiptSale ? `${receiptSale.number} · ${dateTime(receiptSale.occurredAt)}` : undefined}
+        className="receipt-modal"
+        footer={
+          <>
+            <button className="btn" onClick={() => setReceiptSale(null)}>Close</button>
+            <button className="btn btn--primary" onClick={() => window.print()}><Printer size={15} /> Print receipt</button>
+          </>
+        }
+      >
+        {receiptSale && <SaleReceipt sale={receiptSale} />}
       </Modal>
     </div>
   );

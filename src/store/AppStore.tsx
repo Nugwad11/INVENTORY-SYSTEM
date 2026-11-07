@@ -95,7 +95,7 @@ interface AppActions {
   saveProduct: (input: NewProductInput, productId?: string) => boolean;
   toggleProduct: (productId: string) => void;
   updateProductPrice: (productId: string, price: number, reason: string) => boolean;
-  createSale: (input: SaleInput) => boolean;
+  createSale: (input: SaleInput) => Sale | null;
   voidSale: (saleId: string, reason: string) => boolean;
   returnSale: (saleId: string, selections: ReturnSelection[], reason: string) => boolean;
   createPurchaseOrder: (input: {
@@ -533,15 +533,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     };
 
-    const createSale = (input: SaleInput): boolean => {
-      if (!requirePerm('sale.create')) return false;
+    const createSale = (input: SaleInput): Sale | null => {
+      if (!requirePerm('sale.create')) return null;
       if (!input.lines.length) {
         toast('Add at least one product to the sale.', 'error');
-        return false;
+        return null;
       }
       if (input.lines.some((l) => !Number.isFinite(l.qty) || l.qty <= 0)) {
         toast('Every line needs a quantity greater than zero.', 'error');
-        return false;
+        return null;
       }
       const stocks = computeStock(state);
       const saleId = uid('sale');
@@ -559,7 +559,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const product = productById(state, productId);
         if (!product || !product.active) {
           toast('One of the products is unavailable.', 'error');
-          return false;
+          return null;
         }
         const stock = stockFor(stocks, product.id);
         const { allocations, shortfall } = allocateFefo(stock, 'loc-shop', requestedQty);
@@ -568,7 +568,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             `${product.name}: only ${roundQty(requestedQty - shortfall)} ${product.baseUnit} sellable on the shop floor.`,
             'error',
           );
-          return false;
+          return null;
         }
         for (const allocation of allocations) {
           lines.push({
@@ -589,9 +589,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const total = subtotal - discount;
       if (total < 0) {
         toast('Discount cannot exceed the sale total.', 'error');
-        return false;
+        return null;
       }
 
+      let createdSale: Sale | null = null;
       commit((draft) => {
         const occurredAt = new Date().toISOString();
         allocationsByProduct.forEach((allocation) => {
@@ -634,6 +635,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         draft.sales.unshift(sale);
         draft.counters.SALE = (draft.counters.SALE ?? 0) + 1;
+        createdSale = sale;
         audit(
           draft,
           'SALE_COMPLETED',
@@ -645,7 +647,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       });
       toast(`Sale ${number} recorded.`);
-      return true;
+      return createdSale;
     };
 
     const voidSale = (saleId: string, reason: string): boolean => {
