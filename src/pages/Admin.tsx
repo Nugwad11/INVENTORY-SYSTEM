@@ -32,6 +32,7 @@ import {
   Tabs,
   type Tone,
 } from '../components/ui';
+import { AddUserModal } from '../components/AddUserModal';
 import {
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
@@ -219,8 +220,7 @@ export default function Admin() {
   const activeTab = availableTabs.some((item) => item.id === tab) ? tab : availableTabs[0]?.id ?? 'people';
 
   // ---------- People ----------
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [invite, setInvite] = useState({ name: '', role: 'cashier' as Role, phone: '' });
+  const [addUserOpen, setAddUserOpen] = useState(false);
 
   const peopleStats = useMemo(() => {
     const active = state.users.filter((user) => user.active);
@@ -231,13 +231,6 @@ export default function Admin() {
       roles: new Set(active.map((user) => user.role)).size,
     };
   }, [state.users]);
-
-  const submitInvite = () => {
-    if (actions.addUser(invite)) {
-      setInviteOpen(false);
-      setInvite({ name: '', role: 'cashier', phone: '' });
-    }
-  };
 
   // ---------- Policies ----------
   const [policyForm, setPolicyForm] = useState<PolicyForm>(() => policyFormFrom(state.settings));
@@ -447,8 +440,8 @@ export default function Admin() {
   const pageActions = (() => {
     if (activeTab === 'people' && canUsers) {
       return (
-        <button className="btn btn--primary" onClick={() => setInviteOpen(true)}>
-          <UserPlus size={16} /> Invite a user
+        <button className="btn btn--primary" onClick={() => setAddUserOpen(true)}>
+          <UserPlus size={16} /> Add user
         </button>
       );
     }
@@ -511,7 +504,7 @@ export default function Admin() {
 
           <Card
             title="Team"
-            subtitle="Accounts are invitation-only. Role determines every allowed action; menus are not the control."
+            subtitle="Accounts are created manually by an administrator. Role determines every allowed action; menus are not the control."
             flush
           >
             <div className="table-wrap">
@@ -1167,58 +1160,7 @@ export default function Admin() {
         </>
       )}
 
-      <Modal
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-        title="Invite a user"
-        subtitle="The role sets the access boundary immediately. The invitation is demo-only and does not send a message."
-        footer={
-          <>
-            <button className="btn btn--ghost" onClick={() => setInviteOpen(false)}>Cancel</button>
-            <button className="btn btn--primary" onClick={submitInvite} disabled={!invite.name.trim() || !invite.phone.trim()}>
-              <UserPlus size={16} /> Add user
-            </button>
-          </>
-        }
-      >
-        <div className="form-grid">
-          <div className="field span-2">
-            <label htmlFor="invite-name">Full name <span className="req">*</span></label>
-            <input
-              id="invite-name"
-              className="input"
-              value={invite.name}
-              onChange={(e) => setInvite({ ...invite, name: e.target.value })}
-              placeholder="e.g. Ada Nwosu"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="invite-role">Role <span className="req">*</span></label>
-            <select
-              id="invite-role"
-              className="select"
-              value={invite.role}
-              onChange={(e) => setInvite({ ...invite, role: e.target.value as Role })}
-            >
-              {ROLES.map((role) => (
-                <option key={role} value={role}>{ROLE_LABELS[role]}</option>
-              ))}
-            </select>
-            <span className="field__hint">{ROLE_DESCRIPTIONS[invite.role]}</span>
-          </div>
-          <div className="field">
-            <label htmlFor="invite-phone">Phone <span className="req">*</span></label>
-            <input
-              id="invite-phone"
-              className="input"
-              value={invite.phone}
-              onChange={(e) => setInvite({ ...invite, phone: e.target.value })}
-              placeholder="+234 800 000 0000"
-            />
-            <span className="field__hint">Used to identify the person on documents and audit events.</span>
-          </div>
-        </div>
-      </Modal>
+      <AddUserModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
 
       <Modal
         open={resetOpen}

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Store,
+  UserPlus,
   Wifi,
   WifiOff,
   X,
@@ -27,6 +28,7 @@ import {
 import { useApp } from '../store/AppStore';
 import { canAny, ROLE_LABELS, type Permission } from '../domain/permissions';
 import { Avatar } from './ui';
+import { AddUserModal } from './AddUserModal';
 import { dateShort, relative } from '../lib/format';
 
 const PRIMARY_NAV: {
@@ -79,6 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
@@ -264,7 +267,20 @@ export function AppShell({ children }: { children: ReactNode }) {
                       {user.id === currentUser.id && <CheckCircle2 size={14} style={{ marginLeft: 'auto', color: 'var(--brand)' }} />}
                     </button>
                   ))}
-                  <div className="dropdown__label" style={{ borderTop: '1px solid var(--line)', marginTop: 4 }}>
+                  {canAny(currentUser, ['admin.users']) && (
+                    <button
+                      className="dropdown__item"
+                      style={{ borderTop: '1px solid var(--line)', marginTop: 4 }}
+                      onClick={() => {
+                        setUserMenu(false);
+                        setAddUserOpen(true);
+                      }}
+                    >
+                      <UserPlus size={14} />
+                      Add a new user
+                    </button>
+                  )}
+                  <div className="dropdown__label" style={{ marginTop: 4 }}>
                     Seeded {dateShort(state.seededAt)}
                   </div>
                   <button
@@ -343,6 +359,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         ))}
       </div>
+
+      <AddUserModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
     </div>
   );
 }

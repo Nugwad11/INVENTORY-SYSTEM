@@ -1840,9 +1840,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           active: true,
         };
         draft.users.push(user);
-        audit(draft, 'USER_CREATED', 'USER', id, `Invited ${user.name} as ${user.role}.`);
+        audit(draft, 'USER_CREATED', 'USER', id, `Added ${user.name} as ${user.role}.`);
       });
-      toast('User invited.');
+      toast('User added.');
       return true;
     };
 
