@@ -1,0 +1,17 @@
+node_modules/
+dist/
+
+# Runtime demo backups exported from the app
+storehouse-backup-*.json
+
+# PRD generation workspace and duplicate PRD copy
+Kimi_Agent_PRD for Missing Inventory Details/
+
+# Local environment files
+.env
+.env.*
+*.local
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
