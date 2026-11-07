@@ -3,8 +3,10 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  Copy,
   Database,
   Download,
+  KeyRound,
   Lock,
   Pencil,
   RefreshCw,
@@ -226,6 +228,9 @@ export default function Admin() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [disablingUser, setDisablingUser] = useState<User | null>(null);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [resettingUser, setResettingUser] = useState<User | null>(null);
+  const [resetResult, setResetResult] = useState<{ user: User; password: string; resetAt: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const peopleStats = useMemo(() => {
     const active = state.users.filter((user) => user.active);
@@ -238,6 +243,27 @@ export default function Admin() {
   }, [state.users]);
 
   const activeOwnerCount = state.users.filter((user) => user.role === 'owner' && user.active).length;
+
+  const confirmPasswordReset = async () => {
+    if (!resettingUser || resetting) return;
+    setResetting(true);
+    const result = await actions.resetUserPassword(resettingUser.id);
+    setResetting(false);
+    if (result) {
+      setResetResult({ user: resettingUser, password: result.password, resetAt: result.resetAt });
+      setResettingUser(null);
+    }
+  };
+
+  const copyTemporaryPassword = async () => {
+    if (!resetResult) return;
+    try {
+      await navigator.clipboard.writeText(resetResult.password);
+      actions.toast('Temporary password copied.');
+    } catch {
+      actions.toast('Copy failed. Select the password and copy it manually.', 'error');
+    }
+  };
 
   // ---------- Policies ----------
   const [policyForm, setPolicyForm] = useState<PolicyForm>(() => policyFormFrom(state.settings));
@@ -552,6 +578,14 @@ export default function Admin() {
                         <div className="flex" style={{ gap: 6, justifyContent: 'flex-end' }}>
                           <button className="btn btn--sm btn--ghost" onClick={() => setEditingUser(user)}>
                             <Pencil size={13} /> Edit
+                          </button>
+                          <button
+                            className="btn btn--sm btn--ghost"
+                            onClick={() => setResettingUser(user)}
+                            aria-label={`Reset password for ${user.name}`}
+                            title={`Reset password for ${user.name}`}
+                          >
+                            <KeyRound size={13} />
                           </button>
                           {user.active && user.id !== currentUser.id && (
                             <button className="btn btn--sm btn--ghost" onClick={() => actions.switchUser(user.id)}>
@@ -1226,6 +1260,65 @@ export default function Admin() {
               <div><div className="label">Person</div><div className="value" style={{ fontSize: '0.85rem' }}>{disablingUser.name}</div></div>
               <div><div className="label">Role</div><div className="value" style={{ fontSize: '0.85rem' }}>{ROLE_LABELS[disablingUser.role]}</div></div>
               <div><div className="label">Phone</div><div className="value" style={{ fontSize: '0.85rem' }}>{disablingUser.phone}</div></div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!resettingUser}
+        onClose={() => setResettingUser(null)}
+        title="Reset password?"
+        subtitle="A new temporary password replaces the current one immediately."
+        footer={
+          <>
+            <button className="btn btn--ghost" onClick={() => setResettingUser(null)}>Cancel</button>
+            <button className="btn btn--primary" onClick={confirmPasswordReset} disabled={resetting}>
+              {resetting ? 'Resetting…' : 'Reset password'}
+            </button>
+          </>
+        }
+      >
+        {resettingUser && (
+          <div className="grid" style={{ gap: 14 }}>
+            <div className="banner banner--warning">
+              {resettingUser.name} will need the temporary password shown once afterwards. The current password stops
+              working and the temporary one cannot be recovered later.
+            </div>
+            <div className="stat-strip">
+              <div><div className="label">Person</div><div className="value" style={{ fontSize: '0.85rem' }}>{resettingUser.name}</div></div>
+              <div><div className="label">Role</div><div className="value" style={{ fontSize: '0.85rem' }}>{ROLE_LABELS[resettingUser.role]}</div></div>
+              <div><div className="label">Last reset</div><div className="value" style={{ fontSize: '0.85rem' }}>{resettingUser.passwordUpdatedAt ? dateTime(resettingUser.passwordUpdatedAt) : 'Never'}</div></div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!resetResult}
+        onClose={() => setResetResult(null)}
+        title="Temporary password"
+        subtitle={resetResult ? `Issued for ${resetResult.user.name} · ${dateTime(resetResult.resetAt)}` : undefined}
+        footer={<button className="btn btn--primary" onClick={() => setResetResult(null)}>Done</button>}
+      >
+        {resetResult && (
+          <div className="grid" style={{ gap: 14 }}>
+            <div className="banner banner--info">
+              Share this password securely now. It is shown only once; only a hash is stored.
+            </div>
+            <div className="field">
+              <label htmlFor="temporary-password">Temporary password</label>
+              <div className="flex gap-8">
+                <input
+                  id="temporary-password"
+                  className="input mono"
+                  readOnly
+                  value={resetResult.password}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button className="btn" onClick={copyTemporaryPassword}><Copy size={14} /> Copy</button>
+              </div>
+              <span className="field__hint">The previous password no longer works for this account.</span>
             </div>
           </div>
         )}

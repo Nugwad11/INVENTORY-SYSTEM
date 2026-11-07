@@ -48,6 +48,19 @@ import { docNumber, uid } from '../lib/id';
 
 const STORAGE_KEY = 'storehouse.demo.v1';
 
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+
+function generateTemporaryPassword(length = 10): string {
+  const values = new Uint32Array(length);
+  crypto.getRandomValues(values);
+  return Array.from(values, (value) => PASSWORD_ALPHABET[value % PASSWORD_ALPHABET.length]).join('');
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export interface ToastMessage {
   id: string;
   message: string;
@@ -150,6 +163,7 @@ interface AppActions {
   updateSettings: (patch: Partial<Settings>) => void;
   addUser: (input: { name: string; role: Role; phone: string }) => boolean;
   updateUser: (userId: string, input: { name: string; role: Role; phone: string }) => boolean;
+  resetUserPassword: (userId: string) => Promise<{ password: string; resetAt: string } | null>;
   deleteUser: (userId: string) => boolean;
   toggleUser: (userId: string) => void;
   switchUser: (userId: string) => void;
@@ -1885,6 +1899,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     };
 
+    const resetUserPassword = async (userId: string): Promise<{ password: string; resetAt: string } | null> => {
+      if (!requirePerm('admin.users')) return null;
+      const target = state.users.find((u) => u.id === userId);
+      if (!target) return null;
+      const password = generateTemporaryPassword();
+      const passwordHash = await hashPassword(password);
+      const resetAt = new Date().toISOString();
+      commit((draft) => {
+        const user = draft.users.find((u) => u.id === userId);
+        if (!user) return;
+        user.passwordHash = passwordHash;
+        user.passwordUpdatedAt = resetAt;
+        audit(
+          draft,
+          'USER_PASSWORD_RESET',
+          'USER',
+          userId,
+          `Reset the password for ${user.name}.`,
+          { passwordUpdatedAt: target.passwordUpdatedAt ?? null },
+          { passwordUpdatedAt: resetAt },
+        );
+      });
+      toast(`Password reset for ${target.name}.`);
+      return { password, resetAt };
+    };
+
     const deleteUser = (userId: string): boolean => {
       if (!requirePerm('admin.users')) return false;
       const target = state.users.find((u) => u.id === userId);
@@ -2041,6 +2081,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateSettings,
       addUser,
       updateUser,
+      resetUserPassword,
       deleteUser,
       toggleUser,
       switchUser,

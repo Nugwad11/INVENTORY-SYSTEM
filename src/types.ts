@@ -44,6 +44,8 @@ export interface User {
   role: Role;
   phone: string;
   active: boolean;
+  passwordHash?: string;
+  passwordUpdatedAt?: string;
 }
 
 export interface Store {
