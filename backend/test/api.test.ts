@@ -293,6 +293,93 @@ describe('Storehouse API', () => {
     expect((await login('+2348030001009', resetPassword)).statusCode).toBe(401);
   });
 
+  it('changes a temporary password and clears the must-change flag', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/users',
+      headers: auth(ownerToken),
+      payload: { name: 'Ruth Eze', role: 'stock', phone: '+2348030001011' },
+    });
+    expect(created.statusCode).toBe(201);
+    const createdBody = created.json() as { user: { id: string }; temporaryPassword: string };
+
+    const firstLogin = await login('+2348030001011', createdBody.temporaryPassword);
+    expect(firstLogin.statusCode).toBe(200);
+    const token = (firstLogin.json() as { token: string }).token;
+    expect((firstLogin.json() as { mustChangePassword: boolean }).mustChangePassword).toBe(true);
+
+    const wrongCurrent = await app.inject({
+      method: 'POST',
+      url: '/api/auth/change-password',
+      headers: auth(token),
+      payload: { currentPassword: 'not-the-temporary-password', newPassword: 'UpdatedPass123!' },
+    });
+    expect(wrongCurrent.statusCode).toBe(422);
+    expect(wrongCurrent.json().error.code).toBe('INVALID_CURRENT_PASSWORD');
+
+    const unchanged = await app.inject({
+      method: 'POST',
+      url: '/api/auth/change-password',
+      headers: auth(token),
+      payload: { currentPassword: createdBody.temporaryPassword, newPassword: createdBody.temporaryPassword },
+    });
+    expect(unchanged.statusCode).toBe(422);
+    expect(unchanged.json().error.code).toBe('PASSWORD_UNCHANGED');
+
+    const changed = await app.inject({
+      method: 'POST',
+      url: '/api/auth/change-password',
+      headers: auth(token),
+      payload: { currentPassword: createdBody.temporaryPassword, newPassword: 'UpdatedPass123!' },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect((changed.json() as { mustChangePassword: boolean }).mustChangePassword).toBe(false);
+
+    expect((await login('+2348030001011', createdBody.temporaryPassword)).statusCode).toBe(401);
+    const secondLogin = await login('+2348030001011', 'UpdatedPass123!');
+    expect(secondLogin.statusCode).toBe(200);
+    expect((secondLogin.json() as { mustChangePassword: boolean }).mustChangePassword).toBe(false);
+
+    const audit = await app.inject({
+      method: 'GET',
+      url: `/api/audit?entityType=USER&entityId=${createdBody.user.id}`,
+      headers: auth(ownerToken),
+    });
+    const passwordEvent = (audit.json() as { events: { action: string; before: unknown; after: unknown }[] }).events.find(
+      (event) => event.action === 'PASSWORD_CHANGED',
+    );
+    expect(passwordEvent).toBeDefined();
+    expect(JSON.stringify(passwordEvent)).not.toContain('UpdatedPass123!');
+    expect(JSON.stringify(passwordEvent)).not.toContain(createdBody.temporaryPassword);
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/users/${createdBody.user.id}`,
+      headers: auth(ownerToken),
+    });
+    expect(deleted.statusCode).toBe(204);
+  });
+
+  it('locks an account and IP after repeated failed logins', async () => {
+    const phone = '+2348030001077';
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await login(phone, 'wrong-password');
+      expect(response.statusCode).toBe(401);
+      expect(response.json().error.code).toBe('INVALID_CREDENTIALS');
+    }
+
+    const blocked = await login(phone, 'wrong-password');
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error.code).toBe('TOO_MANY_ATTEMPTS');
+    expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
+
+    const stillWrong = await login(phone, config.seedPassword);
+    expect(stillWrong.statusCode).toBe(429);
+
+    const otherAccount = await login('+2348030001002', config.seedPassword);
+    expect(otherAccount.statusCode).toBe(200);
+  });
+
   it('restricts product creation to permitted roles', async () => {
     const forbidden = await app.inject({
       method: 'POST',
