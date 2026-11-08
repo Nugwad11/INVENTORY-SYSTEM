@@ -10,15 +10,14 @@ import {
   ClipboardList,
   LayoutDashboard,
   ListChecks,
+  LogOut,
   Menu,
   PackageCheck,
   PackageSearch,
-  RefreshCw,
   Settings,
   ShieldCheck,
   ShoppingCart,
   Store,
-  UserPlus,
   Wifi,
   WifiOff,
   X,
@@ -26,10 +25,10 @@ import {
   Info,
 } from 'lucide-react';
 import { useApp } from '../store/AppStore';
+import { useAuth } from '../store/AuthContext';
 import { canAny, ROLE_LABELS, type Permission } from '../domain/permissions';
 import { Avatar } from './ui';
-import { UserFormModal } from './UserFormModal';
-import { dateShort, relative } from '../lib/format';
+import { relative } from '../lib/format';
 
 const PRIMARY_NAV: {
   to: string;
@@ -79,9 +78,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     toasts,
     dismissToast,
   } = useApp();
+  const { logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
-  const [addUserOpen, setAddUserOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
@@ -248,50 +247,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
               {userMenu && (
                 <div className="dropdown__menu">
-                  <div className="dropdown__label">Switch demo user</div>
-                  {state.users.map((user) => (
-                    <button
-                      key={user.id}
-                      className={`dropdown__item ${user.id === currentUser.id ? 'active' : ''}`}
-                      onClick={() => {
-                        actions.switchUser(user.id);
-                        setUserMenu(false);
-                      }}
-                      disabled={!user.active}
-                    >
-                      <Avatar name={user.name} />
-                      <span>
-                        <div style={{ fontWeight: 600 }}>{user.name}</div>
-                        <div className="tiny muted">{ROLE_LABELS[user.role]}</div>
-                      </span>
-                      {user.id === currentUser.id && <CheckCircle2 size={14} style={{ marginLeft: 'auto', color: 'var(--brand)' }} />}
-                    </button>
-                  ))}
-                  {canAny(currentUser, ['admin.users']) && (
-                    <button
-                      className="dropdown__item"
-                      style={{ borderTop: '1px solid var(--line)', marginTop: 4 }}
-                      onClick={() => {
-                        setUserMenu(false);
-                        setAddUserOpen(true);
-                      }}
-                    >
-                      <UserPlus size={14} />
-                      Add a new user
-                    </button>
-                  )}
-                  <div className="dropdown__label" style={{ marginTop: 4 }}>
-                    Seeded {dateShort(state.seededAt)}
+                  <div className="dropdown__label">Signed in</div>
+                  <div className="dropdown__item" style={{ cursor: 'default' }}>
+                    <Avatar name={currentUser.name} />
+                    <span>
+                      <div style={{ fontWeight: 600 }}>{currentUser.name}</div>
+                      <div className="tiny muted">{ROLE_LABELS[currentUser.role]} · {currentUser.phone}</div>
+                    </span>
                   </div>
                   <button
                     className="dropdown__item"
+                    style={{ borderTop: '1px solid var(--line)', marginTop: 4 }}
                     onClick={() => {
                       setUserMenu(false);
-                      actions.resetDemo();
+                      logout();
                     }}
                   >
-                    <RefreshCw size={14} />
-                    Reset demo data
+                    <LogOut size={14} />
+                    Sign out
                   </button>
                 </div>
               )}
@@ -302,8 +275,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="demo-bar">
           <ShieldCheck size={14} />
           <span>
-            <strong>Pilot demo.</strong> Signed in as {currentUser.name} ({ROLE_LABELS[currentUser.role]}). Switch
-            users from the avatar menu to test approvals and role limits.
+            <strong>Server session.</strong> Signed in as {currentUser.name} ({ROLE_LABELS[currentUser.role]}). Catalogue
+            products and stock read live from the API; the remaining screens still use local demo data.
           </span>
         </div>
 
@@ -359,8 +332,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         ))}
       </div>
-
-      <UserFormModal open={addUserOpen} onClose={() => setAddUserOpen(false)} />
     </div>
   );
 }

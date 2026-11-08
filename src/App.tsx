@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { AppShell } from './components/Layout';
+import { AuthGate } from './components/AuthGate';
 import { ROLE_LABELS, canAny, type Permission } from './domain/permissions';
 import { useApp } from './store/AppStore';
 import { EmptyState } from './components/ui';
@@ -47,7 +48,7 @@ function Guard({ permissions, children }: { permissions: Permission[]; children:
             <h2>This area is outside your role</h2>
             <p className="mt-8">
               {currentUser.name} is signed in as {ROLE_LABELS[currentUser.role]}. Access is enforced by role, not only
-              by hiding the menu. Switch to a role with the right permission from the avatar menu.
+              by hiding the menu. Sign out and sign in with an account that holds the right permission.
             </p>
             <button className="btn btn--primary mt-16" onClick={() => navigate('/')}>
               Back to Today
@@ -78,8 +79,9 @@ function NotFound() {
 
 export default function App() {
   return (
-    <AppShell>
-      <Suspense fallback={<PageFallback />}>
+    <AuthGate>
+      <AppShell>
+        <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
         <Route
@@ -156,7 +158,8 @@ export default function App() {
         />
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </Suspense>
-    </AppShell>
+        </Suspense>
+      </AppShell>
+    </AuthGate>
   );
 }

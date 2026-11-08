@@ -167,6 +167,7 @@ interface AppActions {
   deleteUser: (userId: string) => boolean;
   toggleUser: (userId: string) => void;
   switchUser: (userId: string) => void;
+  signInServerUser: (user: { id: string; name: string; role: Role; phone: string }) => void;
   markAlertAction: (
     alertId: string,
     action: 'acknowledge' | 'snooze' | 'resolve' | 'reopen' | 'assign',
@@ -426,6 +427,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       });
       toast(`Now acting as ${user.name}`);
+    };
+
+    const signInServerUser = (serverUser: { id: string; name: string; role: Role; phone: string }) => {
+      const existing = state.users.find((u) => u.id === serverUser.id);
+      const unchanged =
+        state.currentUserId === serverUser.id &&
+        existing?.name === serverUser.name &&
+        existing.role === serverUser.role &&
+        existing.phone === serverUser.phone &&
+        existing.active;
+      if (unchanged) return;
+
+      commit((draft) => {
+        const target = draft.users.find((u) => u.id === serverUser.id);
+        if (target) {
+          target.name = serverUser.name;
+          target.role = serverUser.role;
+          target.phone = serverUser.phone;
+          target.active = true;
+          target.passwordHash = undefined;
+          target.passwordUpdatedAt = undefined;
+        } else {
+          draft.users.push({
+            id: serverUser.id,
+            name: serverUser.name,
+            role: serverUser.role,
+            phone: serverUser.phone,
+            active: true,
+          });
+        }
+        draft.currentUserId = serverUser.id;
+      });
     };
 
     const saveProduct = (input: NewProductInput, productId?: string): boolean => {
@@ -2085,6 +2118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteUser,
       toggleUser,
       switchUser,
+      signInServerUser,
       markAlertAction,
       syncNow,
       resetDemo,
