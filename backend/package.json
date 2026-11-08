@@ -1,0 +1,36 @@
+{
+  "name": "storehouse-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Storehouse backend API — auth, catalogue, stock ledger, sales and audit",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "migrate": "tsx src/scripts/migrate.ts",
+    "seed": "tsx src/scripts/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.4.1",
+    "@node-rs/argon2": "^2.2.2",
+    "dotenv": "^18.0.9",
+    "fastify": "^5.12.8",
+    "jose": "^6.2.15",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

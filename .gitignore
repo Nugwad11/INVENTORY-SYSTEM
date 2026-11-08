@@ -10,6 +10,7 @@ Kimi_Agent_PRD for Missing Inventory Details/
 # Local environment files
 .env
 .env.*
+!.env.example
 *.local
 
 # OS/editor noise
