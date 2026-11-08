@@ -69,6 +69,28 @@ export interface ServerStockRow {
   qty: number;
 }
 
+export type UpdateProductInput = Partial<
+  Pick<
+    ServerProduct,
+    | 'name'
+    | 'sku'
+    | 'brand'
+    | 'category'
+    | 'barcode'
+    | 'baseUnit'
+    | 'packSize'
+    | 'packLabel'
+    | 'costKobo'
+    | 'active'
+    | 'batchTracked'
+    | 'perishable'
+    | 'expiryWarningDays'
+    | 'reorderPoint'
+    | 'safetyStock'
+    | 'reorderMultiple'
+  >
+>;
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
@@ -130,6 +152,24 @@ export const api = {
   async stock(token: string): Promise<ServerStockRow[]> {
     const result = await request<{ stock: ServerStockRow[] }>('/api/stock', { token });
     return result.stock;
+  },
+
+  async updateProduct(token: string, id: string, patch: UpdateProductInput): Promise<ServerProduct> {
+    const result = await request<{ product: ServerProduct }>(`/api/products/${id}`, {
+      method: 'PATCH',
+      token,
+      body: patch,
+    });
+    return result.product;
+  },
+
+  async changePrice(token: string, id: string, priceKobo: number, reason: string): Promise<ServerProduct> {
+    const result = await request<{ product: ServerProduct }>(`/api/products/${id}/price`, {
+      method: 'POST',
+      token,
+      body: { priceKobo, reason },
+    });
+    return result.product;
   },
 };
 

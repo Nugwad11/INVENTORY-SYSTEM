@@ -21,7 +21,10 @@ export async function buildApp({ config, db }: AppDependencies): Promise<Fastify
     logger: config.nodeEnv === 'test' ? false : { level: config.nodeEnv === 'production' ? 'info' : 'debug' },
   });
 
-  await app.register(cors, { origin: config.corsOrigins });
+  await app.register(cors, {
+    origin: config.corsOrigins,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  });
   app.decorateRequest('user', null as unknown as FastifyRequest['user']);
 
   app.addHook('onClose', async () => {

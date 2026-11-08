@@ -96,6 +96,59 @@ const createProductSchema = z.object({
   defaultLocationId: z.uuid().nullable().optional(),
 });
 
+const updateProductSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160).optional(),
+    sku: z.string().trim().min(1).max(64).optional(),
+    brand: z.string().trim().max(120).optional(),
+    category: z.string().trim().max(120).optional(),
+    barcode: z.string().trim().max(64).nullable().optional(),
+    baseUnit: z.enum(['each', 'kg', 'litre', 'metre']).optional(),
+    packSize: z.number().positive().optional(),
+    packLabel: z.string().trim().max(64).optional(),
+    costKobo: z.number().int().min(0).optional(),
+    active: z.boolean().optional(),
+    batchTracked: z.boolean().optional(),
+    perishable: z.boolean().optional(),
+    expiryWarningDays: z.number().int().min(0).optional(),
+    reorderPoint: z.number().min(0).optional(),
+    safetyStock: z.number().min(0).optional(),
+    reorderMultiple: z.number().positive().optional(),
+    supplierId: z.uuid().nullable().optional(),
+    defaultLocationId: z.uuid().nullable().optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: 'At least one field is required.',
+  });
+
+const priceChangeSchema = z.object({
+  priceKobo: z.number().int().min(0),
+  reason: z.string().trim().min(3).max(200),
+});
+
+const productIdSchema = z.object({ id: z.uuid() });
+
+const PRODUCT_UPDATABLE: Array<[keyof z.infer<typeof updateProductSchema>, string]> = [
+  ['name', 'name'],
+  ['sku', 'sku'],
+  ['brand', 'brand'],
+  ['category', 'category'],
+  ['barcode', 'barcode'],
+  ['baseUnit', 'base_unit'],
+  ['packSize', 'pack_size'],
+  ['packLabel', 'pack_label'],
+  ['costKobo', 'cost_kobo'],
+  ['active', 'active'],
+  ['batchTracked', 'batch_tracked'],
+  ['perishable', 'perishable'],
+  ['expiryWarningDays', 'expiry_warning_days'],
+  ['reorderPoint', 'reorder_point'],
+  ['safetyStock', 'safety_stock'],
+  ['reorderMultiple', 'reorder_multiple'],
+  ['supplierId', 'supplier_id'],
+  ['defaultLocationId', 'default_location_id'],
+];
+
 export function registerProductRoutes(
   app: FastifyInstance,
   { config, db }: { config: AppConfig; db: Database },
@@ -197,6 +250,131 @@ export function registerProductRoutes(
     });
 
     return reply.code(201).send({ product: toProduct(product) });
+  });
+
+  app.patch('/api/products/:id', { preHandler: [writer] }, async (request) => {
+    const actor = request.user;
+    const { id } = productIdSchema.parse(request.params);
+    const body = updateProductSchema.parse(request.body);
+
+    const updated = await db.transaction(async (tx) => {
+      const { rows } = await tx.query<ProductRow>(
+        `select ${productColumns} from products p where p.id = $1 and p.store_id = $2 for update`,
+        [id, actor.storeId],
+      );
+      const existing = rows[0];
+      if (!existing) throw new ApiError(404, 'PRODUCT_NOT_FOUND', 'Product not found in this store.');
+
+      if (body.sku && body.sku.toLowerCase() !== existing.sku.toLowerCase()) {
+        const duplicate = await tx.query(
+          'select 1 from products where store_id = $1 and lower(sku) = lower($2) and id <> $3',
+          [actor.storeId, body.sku, id],
+        );
+        if (duplicate.rows.length > 0) {
+          throw new ApiError(409, 'SKU_TAKEN', `SKU ${body.sku} is already used by another product.`);
+        }
+      }
+      if (body.supplierId) {
+        const supplier = await tx.query('select 1 from suppliers where id = $1 and store_id = $2', [
+          body.supplierId,
+          actor.storeId,
+        ]);
+        if (supplier.rows.length === 0) {
+          throw new ApiError(422, 'SUPPLIER_NOT_FOUND', 'Supplier not found in this store.');
+        }
+      }
+      if (body.defaultLocationId) {
+        const location = await tx.query('select 1 from locations where id = $1 and store_id = $2', [
+          body.defaultLocationId,
+          actor.storeId,
+        ]);
+        if (location.rows.length === 0) {
+          throw new ApiError(422, 'LOCATION_NOT_FOUND', 'Location not found in this store.');
+        }
+      }
+
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      let index = 1;
+      for (const [field, column] of PRODUCT_UPDATABLE) {
+        const value = body[field];
+        if (value !== undefined) {
+          sets.push(`${column} = $${index++}`);
+          params.push(value);
+        }
+      }
+      params.push(id);
+      const idIndex = index++;
+      params.push(actor.storeId);
+      const storeIndex = index;
+
+      const result = await tx.query<ProductRow>(
+        `update products as p set ${sets.join(', ')}
+         where p.id = $${idIndex} and p.store_id = $${storeIndex}
+         returning ${productColumns}`,
+        params,
+      );
+      const row = result.rows[0];
+      if (!row) throw new ApiError(404, 'PRODUCT_NOT_FOUND', 'Product not found in this store.');
+
+      await appendAudit(tx, {
+        storeId: actor.storeId,
+        actor,
+        action: 'PRODUCT_UPDATED',
+        entityType: 'PRODUCT',
+        entityId: id,
+        summary: `Updated product ${row.sku} (${Object.keys(body).join(', ')}).`,
+        before: toProduct(existing),
+        after: toProduct(row),
+      });
+
+      return row;
+    });
+
+    return { product: toProduct(updated) };
+  });
+
+  app.post('/api/products/:id/price', { preHandler: [writer] }, async (request) => {
+    const actor = request.user;
+    const { id } = productIdSchema.parse(request.params);
+    const body = priceChangeSchema.parse(request.body);
+
+    const updated = await db.transaction(async (tx) => {
+      const { rows } = await tx.query<ProductRow>(
+        `select ${productColumns} from products p where p.id = $1 and p.store_id = $2 for update`,
+        [id, actor.storeId],
+      );
+      const existing = rows[0];
+      if (!existing) throw new ApiError(404, 'PRODUCT_NOT_FOUND', 'Product not found in this store.');
+      if (Number(existing.price_kobo) === body.priceKobo) {
+        throw new ApiError(422, 'PRICE_UNCHANGED', 'The new price matches the current price.');
+      }
+
+      const result = await tx.query<ProductRow>(
+        `update products as p set price_kobo = $1
+         where p.id = $2 and p.store_id = $3
+         returning ${productColumns}`,
+        [body.priceKobo, id, actor.storeId],
+      );
+      const row = result.rows[0];
+      if (!row) throw new ApiError(404, 'PRODUCT_NOT_FOUND', 'Product not found in this store.');
+
+      await appendAudit(tx, {
+        storeId: actor.storeId,
+        actor,
+        action: 'PRICE_CHANGED',
+        entityType: 'PRODUCT',
+        entityId: id,
+        summary: `Changed the selling price for ${row.sku}.`,
+        before: { priceKobo: Number(existing.price_kobo) },
+        after: { priceKobo: body.priceKobo },
+        reason: body.reason,
+      });
+
+      return row;
+    });
+
+    return { product: toProduct(updated) };
   });
 
   app.get('/api/stock', { preHandler: [reader] }, async (request) => {

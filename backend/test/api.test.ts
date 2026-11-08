@@ -404,6 +404,127 @@ describe('Storehouse API', () => {
     expect(products[0]).toMatchObject({ sku: 'SNK-001', priceKobo: 50_000 });
   });
 
+  it('updates product details and records the change', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/products',
+      headers: auth(managerToken),
+      payload: { sku: 'UPD-001', name: 'Before name', category: 'Test', costKobo: 6_000, priceKobo: 10_000 },
+    });
+    expect(created.statusCode).toBe(201);
+    const product = (created.json() as { product: { id: string } }).product;
+
+    const forbidden = await app.inject({
+      method: 'PATCH',
+      url: `/api/products/${product.id}`,
+      headers: auth(cashierToken),
+      payload: { name: 'Cashier edit' },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: `/api/products/${product.id}`,
+      headers: auth(managerToken),
+      payload: { name: 'After name', category: 'Household', reorderPoint: 6, active: false },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect((updated.json() as { product: Record<string, unknown> }).product).toMatchObject({
+      name: 'After name',
+      category: 'Household',
+      reorderPoint: 6,
+      active: false,
+      priceKobo: 10_000,
+    });
+
+    const audit = await app.inject({
+      method: 'GET',
+      url: `/api/audit?entityType=PRODUCT&entityId=${product.id}`,
+      headers: auth(managerToken),
+    });
+    const events = (audit.json() as { events: { action: string }[] }).events;
+    expect(events[0]?.action).toBe('PRODUCT_UPDATED');
+  });
+
+  it('changes prices only through the audited price endpoint', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/products',
+      headers: auth(managerToken),
+      payload: { sku: 'UPD-002', name: 'Price target', priceKobo: 10_000 },
+    });
+    const product = (created.json() as { product: { id: string } }).product;
+
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: `/api/products/${product.id}/price`,
+      headers: auth(cashierToken),
+      payload: { priceKobo: 12_000, reason: 'Cashier price' },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const changed = await app.inject({
+      method: 'POST',
+      url: `/api/products/${product.id}/price`,
+      headers: auth(managerToken),
+      payload: { priceKobo: 12_500, reason: 'Supplier promo' },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect((changed.json() as { product: { priceKobo: number } }).product.priceKobo).toBe(12_500);
+
+    const unchanged = await app.inject({
+      method: 'POST',
+      url: `/api/products/${product.id}/price`,
+      headers: auth(managerToken),
+      payload: { priceKobo: 12_500, reason: 'Same price' },
+    });
+    expect(unchanged.statusCode).toBe(422);
+    expect(unchanged.json().error.code).toBe('PRICE_UNCHANGED');
+
+    const badReason = await app.inject({
+      method: 'POST',
+      url: `/api/products/${product.id}/price`,
+      headers: auth(managerToken),
+      payload: { priceKobo: 13_000, reason: 'x' },
+    });
+    expect(badReason.statusCode).toBe(400);
+
+    const audit = await app.inject({
+      method: 'GET',
+      url: `/api/audit?entityType=PRODUCT&entityId=${product.id}`,
+      headers: auth(managerToken),
+    });
+    const events = (audit.json() as { events: { action: string; reason: string | null }[] }).events;
+    expect(events[0]).toMatchObject({ action: 'PRICE_CHANGED', reason: 'Supplier promo' });
+  });
+
+  it('rejects renaming a product onto an existing SKU', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/products',
+      headers: auth(managerToken),
+      payload: { sku: 'UPD-003', name: 'First' },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/products',
+      headers: auth(managerToken),
+      payload: { sku: 'UPD-004', name: 'Second' },
+    });
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    const secondId = (second.json() as { product: { id: string } }).product.id;
+
+    const conflict = await app.inject({
+      method: 'PATCH',
+      url: `/api/products/${secondId}`,
+      headers: auth(managerToken),
+      payload: { sku: 'UPD-003' },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error.code).toBe('SKU_TAKEN');
+  });
+
   it('rejects malformed request bodies with validation details', async () => {
     const response = await app.inject({
       method: 'POST',
