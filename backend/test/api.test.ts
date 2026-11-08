@@ -393,9 +393,10 @@ describe('Storehouse API', () => {
       method: 'POST',
       url: '/api/products',
       headers: auth(managerToken),
-      payload: { sku: 'SNK-001', name: 'Chin Chin', costKobo: 30_000, priceKobo: 50_000 },
+      payload: { sku: 'SNK-001', name: 'Chin Chin', barcode: null, costKobo: 30_000, priceKobo: 50_000 },
     });
     expect(created.statusCode).toBe(201);
+    expect(created.json().product.barcode).toBeNull();
 
     const list = await app.inject({ method: 'GET', url: '/api/products?search=chin', headers: auth(cashierToken) });
     expect(list.statusCode).toBe(200);

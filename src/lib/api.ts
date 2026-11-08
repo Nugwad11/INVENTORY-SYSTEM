@@ -91,6 +91,12 @@ export type UpdateProductInput = Partial<
   >
 >;
 
+export type CreateProductInput = Omit<UpdateProductInput, 'active'> & {
+  sku: string;
+  name: string;
+  priceKobo: number;
+};
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
@@ -152,6 +158,15 @@ export const api = {
   async stock(token: string): Promise<ServerStockRow[]> {
     const result = await request<{ stock: ServerStockRow[] }>('/api/stock', { token });
     return result.stock;
+  },
+
+  async createProduct(token: string, input: CreateProductInput): Promise<ServerProduct> {
+    const result = await request<{ product: ServerProduct }>('/api/products', {
+      method: 'POST',
+      token,
+      body: input,
+    });
+    return result.product;
   },
 
   async updateProduct(token: string, id: string, patch: UpdateProductInput): Promise<ServerProduct> {

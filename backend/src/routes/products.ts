@@ -80,7 +80,7 @@ const createProductSchema = z.object({
   name: z.string().trim().min(1).max(160),
   brand: z.string().trim().max(120).default(''),
   category: z.string().trim().max(120).default(''),
-  barcode: z.string().trim().max(64).optional(),
+  barcode: z.string().trim().max(64).nullable().optional(),
   baseUnit: z.enum(['each', 'kg', 'litre', 'metre']).default('each'),
   packSize: z.number().positive().default(1),
   packLabel: z.string().trim().max(64).default(''),

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Barcode, Boxes, Download, Pencil, Power, RefreshCw, Search, Tag } from 'lucide-react';
+import { Barcode, Boxes, Download, Pencil, Plus, Power, RefreshCw, Search, Tag } from 'lucide-react';
 import { Badge, Card, Drawer, EmptyState, Modal, PageHeader, Stat } from '../components/ui';
 import { can } from '../domain/permissions';
 import {
   ApiError,
   api,
+  type CreateProductInput,
   type ServerProduct,
   type ServerStockRow,
   type UpdateProductInput,
@@ -33,6 +34,7 @@ interface ProductForm {
   packSize: string;
   packLabel: string;
   costNaira: string;
+  priceNaira: string;
   expiryWarningDays: string;
   reorderPoint: string;
   safetyStock: string;
@@ -53,6 +55,7 @@ function toForm(product: ServerProduct): ProductForm {
     packSize: String(product.packSize),
     packLabel: product.packLabel,
     costNaira: String(product.costKobo / 100),
+    priceNaira: String(product.priceKobo / 100),
     expiryWarningDays: String(product.expiryWarningDays),
     reorderPoint: String(product.reorderPoint),
     safetyStock: String(product.safetyStock),
@@ -60,6 +63,28 @@ function toForm(product: ServerProduct): ProductForm {
     active: product.active,
     perishable: product.perishable,
     batchTracked: product.batchTracked,
+  };
+}
+
+function emptyForm(): ProductForm {
+  return {
+    name: '',
+    sku: '',
+    brand: '',
+    category: '',
+    barcode: '',
+    baseUnit: 'each',
+    packSize: '1',
+    packLabel: '',
+    costNaira: '',
+    priceNaira: '',
+    expiryWarningDays: '14',
+    reorderPoint: '0',
+    safetyStock: '0',
+    reorderMultiple: '1',
+    active: true,
+    perishable: false,
+    batchTracked: true,
   };
 }
 
@@ -95,7 +120,7 @@ export default function Catalogue() {
   const [filter, setFilter] = useState<Filter>('ALL');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const [editor, setEditor] = useState<{ productId: string; form: ProductForm } | null>(null);
+  const [editor, setEditor] = useState<{ productId: string | null; form: ProductForm } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [priceTarget, setPriceTarget] = useState<ServerProduct | null>(null);
   const [priceValue, setPriceValue] = useState('');
@@ -171,6 +196,11 @@ export default function Catalogue() {
     setEditor({ productId: product.id, form: toForm(product) });
   };
 
+  const openCreate = () => {
+    setFormError(null);
+    setEditor({ productId: null, form: emptyForm() });
+  };
+
   const setField = <K extends keyof ProductForm,>(field: K, value: ProductForm[K]) => {
     setEditor((current) => (current ? { ...current, form: { ...current.form, [field]: value } } : current));
   };
@@ -182,7 +212,7 @@ export default function Catalogue() {
       setFormError('Name and SKU are required.');
       return;
     }
-    const patch: UpdateProductInput = {
+    const fields: Required<Omit<UpdateProductInput, 'active'>> = {
       name: form.name.trim(),
       sku: form.sku.trim().toUpperCase(),
       brand: form.brand.trim(),
@@ -196,7 +226,6 @@ export default function Catalogue() {
       reorderPoint: Math.max(0, Number(form.reorderPoint) || 0),
       safetyStock: Math.max(0, Number(form.safetyStock) || 0),
       reorderMultiple: Math.max(0.001, Number(form.reorderMultiple) || 1),
-      active: form.active,
       perishable: form.perishable,
       batchTracked: form.batchTracked,
     };
@@ -204,8 +233,19 @@ export default function Catalogue() {
     setSaving(true);
     setFormError(null);
     try {
-      const updated = await api.updateProduct(token, editor.productId, patch);
-      actions.toast(`Saved ${updated.sku}.`);
+      if (editor.productId === null) {
+        const priceNaira = Number(form.priceNaira);
+        if (!Number.isFinite(priceNaira) || priceNaira < 0) {
+          setFormError('Enter a valid selling price.');
+          return;
+        }
+        const input: CreateProductInput = { ...fields, priceKobo: Math.round(priceNaira * 100) };
+        const created = await api.createProduct(token, input);
+        actions.toast(`Created ${created.sku}.`);
+      } else {
+        const updated = await api.updateProduct(token, editor.productId, { ...fields, active: form.active });
+        actions.toast(`Saved ${updated.sku}.`);
+      }
       setEditor(null);
       await load('refresh');
     } catch (err) {
@@ -301,6 +341,11 @@ export default function Catalogue() {
         subtitle="Read from the Storehouse API. Edits, price changes and deactivation are written to the server and audited."
         actions={
           <>
+            {canManage && (
+              <button className="btn btn--primary" onClick={openCreate} disabled={saving}>
+                <Plus size={16} /> New product
+              </button>
+            )}
             <button className="btn" onClick={() => void load('refresh')} disabled={refreshing || loading}>
               <RefreshCw size={16} /> {refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
@@ -600,14 +645,18 @@ export default function Catalogue() {
       <Modal
         open={!!editor}
         onClose={() => setEditor(null)}
-        title="Edit product"
-        subtitle="Changes are written to the server and audited. Selling price uses the dedicated price action."
+        title={editor?.productId ? 'Edit product' : 'New product'}
+        subtitle={
+          editor?.productId
+            ? 'Changes are written to the server and audited. Selling price uses the dedicated price action.'
+            : 'Adds a product to the server catalogue. Stock arrives later through receiving.'
+        }
         size="wide"
         footer={
           <>
             <button className="btn btn--ghost" onClick={() => setEditor(null)} disabled={saving}>Cancel</button>
             <button className="btn btn--primary" onClick={() => void submitEditor()} disabled={saving}>
-              {saving ? 'Saving…' : 'Save changes'}
+              {saving ? 'Saving…' : editor?.productId ? 'Save changes' : 'Create product'}
             </button>
           </>
         }
@@ -660,6 +709,13 @@ export default function Catalogue() {
               <label htmlFor="p-cost">Unit cost (₦)</label>
               <input id="p-cost" className="input" type="number" min={0} step="0.01" value={editor.form.costNaira} onChange={(e) => setField('costNaira', e.target.value)} />
             </div>
+            {editor.productId === null && (
+              <div className="field">
+                <label htmlFor="p-price">Selling price (₦) <span className="req">*</span></label>
+                <input id="p-price" className="input" type="number" min={0} step="0.01" value={editor.form.priceNaira} onChange={(e) => setField('priceNaira', e.target.value)} placeholder="0.00" />
+                <span className="field__hint">After creation, price changes go through the audited price action.</span>
+              </div>
+            )}
             <div className="field">
               <label htmlFor="p-expiry">Expiry warning (days)</label>
               <input id="p-expiry" className="input" type="number" min={0} value={editor.form.expiryWarningDays} onChange={(e) => setField('expiryWarningDays', e.target.value)} />
@@ -677,9 +733,11 @@ export default function Catalogue() {
               <input id="p-multiple" className="input" type="number" min={0.001} step="0.001" value={editor.form.reorderMultiple} onChange={(e) => setField('reorderMultiple', e.target.value)} />
             </div>
             <div className="span-2 divider" />
-            <label className="check">
-              <input type="checkbox" checked={editor.form.active} onChange={(e) => setField('active', e.target.checked)} /> Active — available for sale and purchasing
-            </label>
+            {editor.productId !== null && (
+              <label className="check">
+                <input type="checkbox" checked={editor.form.active} onChange={(e) => setField('active', e.target.checked)} /> Active — available for sale and purchasing
+              </label>
+            )}
             <label className="check">
               <input type="checkbox" checked={editor.form.perishable} onChange={(e) => setField('perishable', e.target.checked)} /> Perishable — receiving requires an expiry date
             </label>
